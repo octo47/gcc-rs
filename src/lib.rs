@@ -364,7 +364,7 @@ impl Config {
             }
         }
         for lib_path in self.get_compiler_search_paths().unwrap() {
-            self.print(&format!("cargo:libdir={}", lib_path));
+            self.print(&format!("cargo:rustc-link-search=native={}", lib_path));
         }
     }
 
@@ -773,10 +773,12 @@ impl Config {
             io::Cursor::new(base_compiler.output().unwrap().stdout));
         let mut buffer = String::new();
         while output.read_line(&mut buffer).unwrap() > 0 {
+            buffer.trim();
             if buffer.starts_with("libraries: ") {
                 let parts: Vec<&str> =  buffer.split(": =").collect();
                 if parts.len() == 2 {
-                    for pathcomp in parts[0].split(":") {
+                    for pathcomp in parts[1].split(":") {
+                        println!("cargo:warning= gcc library: {:}", pathcomp);
                         rval.push(String::from(pathcomp));
                     }
                 }
