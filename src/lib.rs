@@ -231,6 +231,7 @@ impl Config {
 
     /// Force C++ compiler to link stdc++ library statically.
     /// Not all compilers support this.
+    /// Not supported on Darwin or Windows
     ///
     pub fn cpp_static_stdlib(&mut self, use_static: bool)
                              -> &mut Config {
@@ -371,10 +372,12 @@ impl Config {
         // Add specific C++ libraries, if enabled.
         if self.cpp {
             if let Some(stdlib) = self.get_cpp_link_stdlib() {
-                // link stdlibs statically if specified.
-                if self.cpp_static_stdlib {
+                let target = self.get_target();
+                if self.cpp_static_stdlib &&
+                    !target.contains("darwin") &&
+                    !target.contains("msvc") {
                     self.print(&format!("cargo:rustc-link-lib=static={}", stdlib));
-                }else {
+                } else {
                     self.print(&format!("cargo:rustc-link-lib={}", stdlib));
                 };
             }
