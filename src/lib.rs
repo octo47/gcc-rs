@@ -363,6 +363,9 @@ impl Config {
                 self.print(&format!("cargo:rustc-link-lib={}", stdlib));
             }
         }
+        for lib_path in self.get_compiler_search_paths().unwrap() {
+            self.print(&format!("cargo:libdir={}", lib_path));
+        }
     }
 
     #[cfg(feature = "parallel")]
@@ -755,6 +758,33 @@ impl Config {
             };
             Tool::new(PathBuf::from(compiler))
         })
+    }
+
+    // Detects library search path provided by gcc compatible flag -print-search-dirs.
+    fn get_compiler_search_paths(&self) -> Result<Vec<String>, String> {
+        let mut rval = Vec::<String>::new();
+        if self.get_target().contains("msvc") {
+            return Ok(rval)
+        };
+        let mut base_compiler = self.get_base_compiler().to_command();
+        base_compiler.arg("-print-search-dirs");
+        run(&mut base_compiler, "gcc");
+        let mut output = BufReader::new(
+            io::Cursor::new(base_compiler.output().unwrap().stdout));
+        let mut buffer = String::new();
+        while output.read_line(&mut buffer).unwrap() > 0 {
+            if buffer.starts_with("libraries: ") {
+                let parts: Vec<&str> =  buffer.split(": =").collect();
+                if parts.len() == 2 {
+                    for pathcomp in parts[0].split(":") {
+                        rval.push(String::from(pathcomp));
+                    }
+                }
+            }
+            buffer.clear();
+        }
+        Ok(rval)
+
     }
 
     fn get_var(&self, var_base: &str) -> Result<String, String> {
