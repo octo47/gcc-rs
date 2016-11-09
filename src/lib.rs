@@ -71,6 +71,7 @@ pub struct Config {
     cpp: bool,
     cpp_link_stdlib: Option<Option<String>>,
     cpp_set_stdlib: Option<String>,
+    cpp_static_stdlib: bool,
     target: Option<String>,
     host: Option<String>,
     out_dir: Option<PathBuf>,
@@ -131,6 +132,7 @@ impl Config {
             cpp: false,
             cpp_link_stdlib: None,
             cpp_set_stdlib: None,
+            cpp_static_stdlib: true,
             target: None,
             host: None,
             out_dir: None,
@@ -224,6 +226,15 @@ impl Config {
                           -> &mut Config {
         self.cpp_set_stdlib = cpp_set_stdlib.map(|s| s.into());
         self.cpp_link_stdlib(cpp_set_stdlib);
+        self
+    }
+
+    /// Force C++ compiler to link stdc++ library statically.
+    /// Not all compilers support this.
+    ///
+    pub fn cpp_static_stdlib(&mut self, use_static: bool)
+                             -> &mut Config {
+        self.cpp_static_stdlib = use_static;
         self
     }
 
@@ -360,11 +371,13 @@ impl Config {
         // Add specific C++ libraries, if enabled.
         if self.cpp {
             if let Some(stdlib) = self.get_cpp_link_stdlib() {
-                self.print(&format!("cargo:rustc-link-lib={}", stdlib));
+                // link stdlibs statically if specified.
+                if self.cpp_static_stdlib {
+                    self.print(&format!("cargo:rustc-link-lib=static={}", stdlib));
+                }else {
+                    self.print(&format!("cargo:rustc-link-lib={}", stdlib));
+                };
             }
-        }
-        for lib_path in self.get_compiler_search_paths().unwrap() {
-            self.print(&format!("cargo:rustc-link-search=native={}", lib_path));
         }
     }
 
@@ -760,35 +773,6 @@ impl Config {
         })
     }
 
-    // Detects library search path provided by gcc compatible flag -print-search-dirs.
-    fn get_compiler_search_paths(&self) -> Result<Vec<String>, String> {
-        let mut rval = Vec::<String>::new();
-        if self.get_target().contains("msvc") {
-            return Ok(rval)
-        };
-        let mut base_compiler = self.get_base_compiler().to_command();
-        base_compiler.arg("-print-search-dirs");
-        run(&mut base_compiler, "gcc");
-        let mut output = BufReader::new(
-            io::Cursor::new(base_compiler.output().unwrap().stdout));
-        let mut buffer = String::new();
-        while output.read_line(&mut buffer).unwrap() > 0 {
-            buffer.trim();
-            if buffer.starts_with("libraries: ") {
-                let parts: Vec<&str> =  buffer.split(": =").collect();
-                if parts.len() == 2 {
-                    for pathcomp in parts[1].split(":") {
-                        println!("cargo:warning= gcc library: {:}", pathcomp);
-                        rval.push(String::from(pathcomp));
-                    }
-                }
-            }
-            buffer.clear();
-        }
-        Ok(rval)
-
-    }
-
     fn get_var(&self, var_base: &str) -> Result<String, String> {
         let target = self.get_target();
         let host = self.get_host();
@@ -833,7 +817,7 @@ impl Config {
             if target.contains("msvc") {
                 None
             } else if target.contains("darwin") {
-                Some("c++".to_string())
+                Some("stdc++".to_string())
             } else {
                 Some("stdc++".to_string())
             }
