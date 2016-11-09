@@ -852,7 +852,7 @@ impl Config {
             if target.contains("msvc") {
                 None
             } else if target.contains("darwin") {
-                Some("stdc++".to_string())
+                Some("c++".to_string())
             } else {
                 Some("stdc++".to_string())
             }
